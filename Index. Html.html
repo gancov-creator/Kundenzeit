@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#17324d">
+<title>Kundenzeit</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f1f4f7;color:#17202a}
+header{background:#17324d;color:#fff;padding:22px 16px;text-align:center}
+header h1{margin:0 0 6px;font-size:28px}
+header small{opacity:.85}
+main{max-width:680px;margin:auto;padding:14px}
+.card,.day{background:#fff;border-radius:18px;padding:18px;margin:12px 0;box-shadow:0 3px 12px #00000012}
+.total{text-align:center;font-size:42px;font-weight:800;margin:10px 0 4px}
+.total small{display:block;font-size:16px;color:#6b7680;font-weight:700}
+label{font-weight:800;display:block;margin:12px 0 7px}
+input,button{width:100%;font-size:18px;border-radius:12px;padding:14px;border:1px solid #ccd4dc}
+button{border:0;font-weight:800;cursor:pointer}
+.save{background:#17324d;color:white;margin-top:12px}
+.voice{background:#e8eef4;color:#17324d;margin-top:10px}
+.nav{display:flex;gap:8px;align-items:center;margin:10px 0}
+.nav button{background:#17324d;color:white;padding:11px 8px}
+.nav .week{background:white;color:#17324d;border:1px solid #ccd4dc;flex:1}
+.day h2{margin:0 0 12px;font-size:20px}
+.entry{padding:11px 0;border-bottom:1px solid #e5e9ed}
+.entry:last-child{border-bottom:0}
+.entry strong{font-size:17px}
+.hours{float:right;font-weight:900}
+.empty{color:#7b8792;text-align:center;padding:8px}
+.weektotal{text-align:center;font-size:20px;font-weight:900;margin:12px}
+.danger{background:#eef2f6;color:#d33;margin-top:10px}
+.hint{font-size:13px;color:#6d7882;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>⏱️ Kundenzeit</h1>
+<small>Arbeitsstunden nach Kalenderwoche</small>
+</header>
+
+<main>
+<section class="card">
+<div class="total" id="total">0,00 h<small>GESAMT HEUTE</small></div>
+</section>
+
+<section class="card">
+<label for="kunde">Kunde</label>
+<input id="kunde" placeholder="z. B. Müller">
+
+<label for="stunden">Arbeitsstunden</label>
+<input id="stunden" type="number" inputmode="decimal" step="0.25" min="0" placeholder="z. B. 4">
+
+<button class="save" onclick="add()">+ Eintrag speichern</button>
+<button class="voice" onclick="speak()">🎙️ Kunde + Stunden ansagen</button>
+<div class="hint">Beispiel: „Müller 4 Stunden“</div>
+</section>
+
+<section class="card">
+<div class="nav">
+<button onclick="changeWeek(-1)">‹ KW</button>
+<button class="week" id="kw"></button>
+<button onclick="changeWeek(1)">KW ›</button>
+</div>
+<div class="weektotal" id="weektotal">Woche: 0,00 h</div>
+<div id="week"></div>
+<button class="danger" onclick="clearCurrentWeek()">Aktuelle KW löschen</button>
+</section>
+</main>
+
+<script>
+const KEY="kundenzeit_kw_v3";
+let data=JSON.parse(localStorage.getItem(KEY)||"[]");
+let selectedDate=new Date();
+
+function iso(d){
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
+function startOfWeek(d){
+  const x=new Date(d);
+  const day=(x.getDay()+6)%7;
+  x.setDate(x.getDate()-day);
+  x.setHours(0,0,0,0);
+  return x;
+}
+function dateForOffset(n){
+  const d=startOfWeek(selectedDate);
+  d.setDate(d.getDate()+n);
+  return d;
+}
+function weekNo(d){
+  const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=x.getUTCDay()||7;
+  x.setUTCDate(x.getUTCDate()+4-day);
+  const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));
+  return Math.ceil((((x-y)/86400000)+1)/7);
+}
+function save(){localStorage.setItem(KEY,JSON.stringify(data));}
+function add(){
+  const kunde=document.getElementById("kunde").value.trim();
+  const st=parseFloat(document.getElementById("stunden").value);
+  if(!kunde||!isFinite(st)||st<=0){alert("Bitte Kunde und Arbeitsstunden eingeben.");return}
+  data.push({date:iso(new Date()),kunde,stunden:st});
+  save();
+  document.getElementById("kunde").value="";
+  document.getElementById("stunden").value="";
+  render();
+}
+function changeWeek(n){
+  selectedDate.setDate(selectedDate.getDate()+n*7);
+  render();
+}
+function render(){
+  const kw=weekNo(selectedDate);
+  const year=startOfWeek(selectedDate).getFullYear();
+  document.getElementById("kw").textContent=`KW ${kw} · ${year}`;
+  const today=iso(new Date());
+  let todayTotal=data.filter(x=>x.date===today).reduce((s,x)=>s+Number(x.stunden),0);
+  document.getElementById("total").innerHTML=`${todayTotal.toFixed(2).replace(".",",")} h<small>GESAMT HEUTE</small>`;
+  const start=startOfWeek(selectedDate);
+  const end=new Date(start); end.setDate(end.getDate()+7);
+  let weekEntries=data.filter(x=>new Date(x.date)>=start && new Date(x.date)<end);
+  let wt=weekEntries.reduce((s,x)=>s+Number(x.stunden),0);
+  document.getElementById("weektotal").textContent=`Woche: ${wt.toFixed(2).replace(".",",")} h`;
+  let out="";
+  for(let i=0;i<7;i++){
+    const d=dateForOffset(i), key=iso(d);
+    const entries=data.filter(x=>x.date===key);
+    const dayTotal=entries.reduce((s,x)=>s+Number(x.stunden),0);
+    out+=`<div class="day"><h2>${d.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"})} <span class="hours">${dayTotal?dayTotal.toFixed(2).replace(".",",")+" h":""}</span></h2>`;
+    if(!entries.length) out+=`<div class="empty">Keine Einträge</div>`;
+    entries.forEach((e,idx)=>{
+      out+=`<div class="entry"><strong>${esc(e.kunde)}</strong><span class="hours">${Number(e.stunden).toFixed(2).replace(".",",")} h</span></div>`;
+    });
+    out+="</div>";
+  }
+  document.getElementById("week").innerHTML=out;
+}
+function clearCurrentWeek(){
+  if(!confirm("Alle Einträge dieser Kalenderwoche löschen?"))return;
+  const start=startOfWeek(selectedDate), end=new Date(start); end.setDate(end.getDate()+7);
+  data=data.filter(x=>!(new Date(x.date)>=start&&new Date(x.date)<end));
+  save(); render();
+}
+function esc(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+
+function speak(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    alert("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Safari verwenden oder die iPhone-Diktierfunktion nutzen.");
+    return;
+  }
+  const r=new SR();
+  r.lang="de-DE"; r.interimResults=false; r.maxAlternatives=1;
+  r.onresult=e=>{
+    const text=e.results[0][0].transcript;
+    const m=text.match(/(.+?)\s+(\d+(?:[,.]\d+)?)\s*(?:stunden?|std|h)?$/i);
+    if(m){
+      document.getElementById("kunde").value=m[1].trim();
+      document.getElementById("stunden").value=m[2].replace(",",".");
+      add();
+    }else{
+      alert("Ich habe es nicht eindeutig verstanden. Sag z. B. „Müller 4 Stunden“.");
+    }
+  };
+  r.onerror=()=>alert("Spracherkennung konnte nicht gestartet werden. Bitte Mikrofonzugriff erlauben.");
+  r.start();
+}
+render();
+</script>
+</body>
+</html>
