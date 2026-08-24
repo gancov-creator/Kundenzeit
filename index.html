@@ -1,0 +1,35 @@
+<!doctype html><html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324d"><title>Kundenzeit</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f5f7;color:#17212b}
+header{background:#17324d;color:white;padding:22px 18px}.date{opacity:.85}h1{margin:0;font-size:28px}
+main{max-width:650px;margin:auto;padding:16px}.total,.card{background:white;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 3px 14px #0001}
+.total{text-align:center}.total small{display:block;font-weight:700;color:#66727e}.total strong{display:block;font-size:40px}
+label{font-weight:700;display:block;margin:10px 0 7px}input{width:100%;padding:14px;border:1px solid #ccd3da;border-radius:11px;font-size:18px}
+button{width:100%;border:0;border-radius:12px;padding:14px;font-size:17px;font-weight:700;margin-top:12px}.save{background:#17324d;color:white}.voice{background:#e7edf3;color:#17324d}.delete{background:#eef1f4}
+.entry{padding:14px 0;border-bottom:1px solid #e4e7eb;display:flex;justify-content:space-between}.entry:last-child{border:0}.name{font-weight:700}.hours{font-weight:800}.muted{text-align:center;color:#74808b;padding:12px}
+</style></head><body>
+<header><h1>⏱ Kundenzeit</h1><div class="date" id="date"></div></header>
+<main>
+<section class="total"><small>GESAMT HEUTE</small><strong><span id="sum">0,00</span> h</strong></section>
+<section class="card">
+<label>Kunde</label><input id="kunde" placeholder="z. B. Müller">
+<label>Arbeitsstunden</label><input id="stunden" type="number" step="0.25" inputmode="decimal" placeholder="z. B. 4">
+<button class="save" onclick="add()">+ Eintrag speichern</button>
+<button class="voice" onclick="speak()">🎤 Kunde + Stunden ansagen</button>
+</section>
+<section class="card"><div id="list"></div><button class="delete" onclick="clearDay()">Heutige Einträge löschen</button></section>
+</main>
+<script>
+const KEY="kundenzeit_v2";const day=()=>new Date().toLocaleDateString("de-DE");
+document.getElementById("date").textContent=day();
+function get(){try{return JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){return[]}}
+function put(x){localStorage.setItem(KEY,JSON.stringify(x))}
+function add(){const k=document.getElementById("kunde").value.trim(),h=parseFloat(document.getElementById("stunden").value.replace(",","."));if(!k||!Number.isFinite(h)||h<0){alert("Bitte Kunde und Stunden eingeben.");return}const a=get();a.push({date:day(),kunde:k,stunden:h});put(a);document.getElementById("kunde").value="";document.getElementById("stunden").value="";render()}
+function render(){const a=get().filter(x=>x.date===day()),total=a.reduce((s,x)=>s+Number(x.stunden),0);document.getElementById("sum").textContent=total.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});document.getElementById("list").innerHTML=a.length?a.map(x=>'<div class="entry"><span class="name">'+esc(x.kunde)+'</span><span class="hours">'+Number(x.stunden).toLocaleString("de-DE",{minimumFractionDigits:2})+' h</span></div>').join(""):'<div class="muted">Noch keine Einträge heute.</div>'}
+function clearDay(){if(confirm("Alle heutigen Einträge löschen?")){put(get().filter(x=>x.date!==day()));render()}}
+function esc(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function speak(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("Direkte Spracherkennung nicht verfügbar. Nutze die iPhone-Diktierfunktion.");return}const r=new SR();r.lang="de-DE";r.interimResults=false;r.maxAlternatives=1;r.onresult=e=>{const t=e.results[0][0].transcript.trim(),m=t.match(/^(.*?)\s+(\d+(?:[,.]\d+)?)\s*(?:stunden?|std\.?|h)\s*$/i);if(m){document.getElementById("kunde").value=m[1].trim();document.getElementById("stunden").value=m[2].replace(",","." );add()}else alert("Bitte z. B. „Müller 4 Stunden“ sagen. Erkannt: "+t)};r.start()}
+render();
+</script></body></html>
