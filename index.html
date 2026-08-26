@@ -35,7 +35,7 @@ button{border:0;font-weight:800;margin-top:10px}.save{background:#17324d;color:w
 <option value="urlaub">Urlaub</option>
 <option value="krank">Krank</option>
 </select>
-<div id="kundeWrap"><label>Kunde</label><input id="kunde" placeholder="z. B. Müller"></div>
+<label>Datum</label><input id="datum" type="date"><div id="kundeWrap"><label>Kunde</label><input id="kunde" placeholder="z. B. Müller"></div>
 <label>Stunden</label><input id="stunden" type="number" inputmode="decimal" step="0.25" min="0" placeholder="z. B. 4">
 <button class="save" onclick="add()">+ Eintrag speichern</button>
 <button class="voice" onclick="startVoice()">🎙️ Kunde + Stunden ansagen</button>
@@ -69,10 +69,10 @@ function kw(d){let x=monday(d),y=new Date(x);y.setDate(y.getDate()+3);let f=mond
 function changeWeek(n){selected.setDate(selected.getDate()+n*7);render()}
 function updateFields(){document.getElementById("kundeWrap").style.display=document.getElementById("art").value==="arbeit"?"block":"none"}
 function add(){
- let art=document.getElementById("art").value,k=document.getElementById("kunde").value.trim(),h=parseFloat(document.getElementById("stunden").value.replace(",","."));
+ let art=document.getElementById("art").value,k=document.getElementById("kunde").value.trim(),h=parseFloat(document.getElementById("stunden").value.replace(",",".")); let chosen=document.getElementById("datum").value || iso(new Date());
  if(!isFinite(h)||h<=0){alert("Bitte Stunden eingeben.");return}
  if(art==="arbeit"&&!k){alert("Bitte Kunde eingeben.");return}
- entries.push({date:iso(new Date()),art,kunde:k,stunden:h});save();
+ entries.push({date:chosen,art,kunde:k,stunden:h});save();
  document.getElementById("kunde").value="";document.getElementById("stunden").value="";render()
 }
 function render(){
@@ -106,13 +106,50 @@ function createSeparate(t){openReport(t,t==="urlaub"?"URLAUBSBERICHT":"KRANKBERI
 function openReport(type,title){
  let es=reportData(type),s=monday(selected),W=kw(s),year=s.getFullYear();
  let w=window.open("","_blank");if(!w){alert("Bitte Pop-ups erlauben.");return}
- let html=`<!doctype html><html lang="de"><meta charset="utf-8"><title>${title} KW ${W}</title><style>body{font-family:Arial;margin:28px}h1{margin-bottom:4px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #222;padding:8px}th{background:#eee}.r{text-align:right}.sum{margin-top:18px;font-size:18px;font-weight:bold}</style><h1>Lugstein Haustechnik</h1><p><b>Name:</b> Ivan Gancov &nbsp; <b>KW:</b> ${W}/${year}</p><h2>${title}</h2><table><tr><th>Datum</th><th>Kunde / Eintrag</th><th>Art</th><th>Stunden</th></tr>`;
- es.forEach(e=>html+=`<tr><td>${new Date(e.date+"T00:00:00").toLocaleDateString("de-DE")}</td><td>${e.art==="arbeit"?esc(e.kunde):e.art==="urlaub"?"Urlaub":"Krank"}</td><td>${e.art==="arbeit"?"Arbeit":e.art==="urlaub"?"Urlaub":"Krank"}</td><td class="r">${fmt(e.stunden)}</td></tr>`);
- let total=es.reduce((a,e)=>a+Number(e.stunden),0);html+=`</table><div class="sum">Gesamt: ${fmt(total)} Stunden</div>`;
- if(type==="all"){let work=es.filter(e=>e.art==="arbeit").reduce((a,e)=>a+Number(e.stunden),0),vac=es.filter(e=>e.art==="urlaub").reduce((a,e)=>a+Number(e.stunden),0),sick=es.filter(e=>e.art==="krank").reduce((a,e)=>a+Number(e.stunden),0);html+=`<p>Arbeitsstunden: ${fmt(work)} h<br>Urlaubsstunden: ${fmt(vac)} h<br>Krankstunden: ${fmt(sick)} h<br>Normalstunden: ${fmt(Math.min(total,38.5))} h<br>Überstunden: ${fmt(Math.max(0,total-38.5))} h</p>`}
- html+=`</html>`;w.document.write(html);w.document.close();setTimeout(()=>w.print(),300)
+ let html=`<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} KW ${W}</title>
+ <style>
+ body{font-family:Arial,sans-serif;margin:20px;color:#111}h1{margin:0 0 4px;font-size:26px}h2{margin:12px 0}
+ .head{display:grid;grid-template-columns:1fr 1fr;border:1px solid #222}.head>div{padding:10px;border-right:1px solid #222}.head>div:last-child{border:0}
+ .day{border:1px solid #222;border-bottom:0}.day:last-of-type{border-bottom:1px solid #222}
+ .dayhead{display:grid;grid-template-columns:150px 1fr 90px;background:#f3f3f3;border-bottom:1px solid #222;font-weight:bold}
+ .dayhead div,.row div{padding:7px;border-right:1px solid #ccc}.dayhead div:last-child,.row div:last-child{border:0}
+ .row{display:grid;grid-template-columns:150px 1fr 90px;border-bottom:1px solid #ddd}.row:last-child{border-bottom:0}
+ .num{text-align:right}.free{text-align:center;color:#1769ff;font-weight:bold;padding:12px}
+ .sum{margin-top:18px;border:1px solid #222;padding:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid div{padding:7px}
+ @media print{body{margin:8mm}}
+ </style><body>
+ <h1>Lugstein Haustechnik</h1>
+ <div class="head"><div><b>Kundenname</b></div><div><b>Name:</b> Ivan Gancov<br><b>Kalenderwoche:</b> ${W} / ${year}</div></div>
+ <h2>${title}</h2>`;
+ let base=new Date(s);
+ for(let i=0;i<7;i++){
+   let d=new Date(base);d.setDate(d.getDate()+i);let key=iso(d),esDay=es.filter(e=>e.date===key);
+   let label=d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+   let dayName=d.toLocaleDateString("de-DE",{weekday:"long"}).toUpperCase();
+   let dayTotal=esDay.reduce((a,e)=>a+Number(e.stunden),0);
+   html+=`<div class="day"><div class="dayhead"><div>Datum<br>${label}<br>${dayName}</div><div>Kunde / Eintrag</div><div>Std.</div></div>`;
+   if(esDay.length){
+     esDay.forEach(e=>{let name=e.art==="arbeit"?esc(e.kunde):e.art==="urlaub"?"Urlaub":"Krank";
+       html+=`<div class="row"><div></div><div>${name}</div><div class="num">${fmt(e.stunden)}</div></div>`;
+     });
+   }else html+=`<div class="free">Keine Einträge</div>`;
+   html+=`<div class="row"><div></div><div><b>Tagessumme</b></div><div class="num"><b>${fmt(dayTotal)}</b></div></div></div>`;
+ }
+ let work=es.filter(e=>e.art==="arbeit").reduce((a,e)=>a+Number(e.stunden),0);
+ let vac=es.filter(e=>e.art==="urlaub").reduce((a,e)=>a+Number(e.stunden),0);
+ let sick=es.filter(e=>e.art==="krank").reduce((a,e)=>a+Number(e.stunden),0);
+ let total=work+vac+sick;
+ html+=`<div class="sum"><div class="grid">
+ <div><b>Arbeitsstunden (Kunde)</b><br>${fmt(work)} h</div>
+ <div><b>Gesamtstunden (Woche)</b><br>${fmt(total)} h</div>
+ <div><b>Urlaubsstunden</b><br>${fmt(vac)} h</div>
+ <div><b>Normalstunden (bis 38,5 h)</b><br>${fmt(Math.min(total,38.5))} h</div>
+ <div><b>Krankstunden</b><br>${fmt(sick)} h</div>
+ <div><b>Überstunden (ab 38,5 h)</b><br>${fmt(Math.max(0,total-38.5))} h</div>
+ </div></div><p><button onclick="window.print()">Als PDF speichern / Drucken</button></p></body></html>`;
+ w.document.write(html);w.document.close();
 }
-updateFields();render();
+document.getElementById("datum").value=iso(new Date());updateFields();render();
 </script>
 </body>
 </html>
