@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324d"><title>Kundenzeit</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f2f5f7;color:#17212b}
+header{background:#17324d;color:white;padding:20px 16px;text-align:center}h1{margin:0;font-size:28px}header small{opacity:.85}
+main{max-width:700px;margin:auto;padding:14px}.card{background:white;border-radius:18px;padding:17px;margin:12px 0;box-shadow:0 3px 12px #0001}
+label{font-weight:800;display:block;margin:10px 0 7px}input,select,button{width:100%;font-size:18px;padding:13px;border-radius:12px;border:1px solid #ccd4dc}
+button{border:0;font-weight:800;margin-top:10px}.save{background:#17324d;color:white}.voice{background:#e7edf3;color:#17324d}.pdf{background:#17324d;color:white}
+.nav{display:flex;gap:8px;align-items:center}.nav button{margin:0;width:auto;padding:11px 15px}.kw{flex:1;text-align:center;font-size:20px;font-weight:900}
+.total{text-align:center;font-size:35px;font-weight:900}.total small{display:block;font-size:14px;color:#69747e}
+.day{padding:13px 0;border-bottom:1px solid #e4e8eb}.dayhead{display:flex;justify-content:space-between;font-weight:900}.entry{display:flex;justify-content:space-between;padding:9px 0}.hours{font-weight:900}.muted{text-align:center;color:#77838e;padding:8px}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.box{border:1px solid #d8dee4;border-radius:12px;padding:11px}.box b{display:block;font-size:14px;color:#68737d}.box span{font-size:20px;font-weight:900}
+</style>
+</head>
+<body>
+<header><h1>⏱️ Kundenzeit</h1><small>Arbeitszeit · Urlaub · Krank</small></header>
+<main>
+<section class="card">
+<div class="total"><span id="total">0,00</span> h<small>GESAMT HEUTE</small></div>
+<div class="summary">
+<div class="box"><b>Arbeit</b><span id="todayWork">0,00 h</span></div>
+<div class="box"><b>Urlaub</b><span id="todayVacation">0,00 h</span></div>
+<div class="box"><b>Krank</b><span id="todaySick">0,00 h</span></div>
+<div class="box"><b>Gesamt</b><span id="todayAll">0,00 h</span></div>
+</div>
+</section>
+
+<section class="card">
+<label>Eintragsart</label>
+<select id="art" onchange="updateFields()">
+<option value="arbeit">Arbeitszeit / Kunde</option>
+<option value="urlaub">Urlaub</option>
+<option value="krank">Krank</option>
+</select>
+<label>Datum</label><input id="datum" type="date"><div id="kundeWrap"><label>Kunde</label><input id="kunde" placeholder="z. B. Müller"></div>
+<label>Stunden</label><input id="stunden" type="number" inputmode="decimal" step="0.25" min="0" placeholder="z. B. 4">
+<button class="save" onclick="add()">+ Eintrag speichern</button>
+<button class="voice" onclick="startVoice()">🎙️ Kunde + Stunden ansagen</button>
+<div class="muted">Bei Urlaub/Krank: Art auswählen und nur die Stunden eingeben.</div>
+</section>
+
+<section class="card">
+<div class="nav"><button onclick="changeWeek(-1)">‹ KW</button><div class="kw" id="kw"></div><button onclick="changeWeek(1)">KW ›</button></div>
+<div id="week"></div>
+<div class="summary">
+<div class="box"><b>Arbeitsstunden</b><span id="wWork">0,00 h</span></div>
+<div class="box"><b>Urlaubsstunden</b><span id="wVac">0,00 h</span></div>
+<div class="box"><b>Krankstunden</b><span id="wSick">0,00 h</span></div>
+<div class="box"><b>Gesamt</b><span id="wAll">0,00 h</span></div>
+<div class="box"><b>Normalstunden</b><span id="normal">0,00 h</span></div>
+<div class="box"><b>Überstunden</b><span id="overtime">0,00 h</span></div>
+</div>
+<button class="pdf" onclick="createReport()">📄 Wochenbericht erstellen</button>
+<button onclick="createSeparate('urlaub')">Urlaubsbericht erstellen</button>
+<button onclick="createSeparate('krank')">Krankbericht erstellen</button>
+</section>
+</main>
+
+<script>
+const KEY="kundenzeit_arz_v1";let entries=JSON.parse(localStorage.getItem(KEY)||"[]");let selected=new Date();
+const fmt=n=>Number(n).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});
+function save(){localStorage.setItem(KEY,JSON.stringify(entries))}
+function iso(d){let x=new Date(d);return new Date(x.getTime()-x.getTimezoneOffset()*60000).toISOString().slice(0,10)}
+function monday(d){let x=new Date(d),n=(x.getDay()+6)%7;x.setDate(x.getDate()-n);x.setHours(0,0,0,0);return x}
+function kw(d){let x=monday(d),y=new Date(x);y.setDate(y.getDate()+3);let f=monday(new Date(y.getFullYear(),0,4));return Math.round((x-f)/604800000)+1}
+function changeWeek(n){selected.setDate(selected.getDate()+n*7);render()}
+function updateFields(){document.getElementById("kundeWrap").style.display=document.getElementById("art").value==="arbeit"?"block":"none"}
+function add(){
+ let art=document.getElementById("art").value,k=document.getElementById("kunde").value.trim(),h=parseFloat(document.getElementById("stunden").value.replace(",",".")); let chosen=document.getElementById("datum").value || iso(new Date());
+ if(!isFinite(h)||h<=0){alert("Bitte Stunden eingeben.");return}
+ if(art==="arbeit"&&!k){alert("Bitte Kunde eingeben.");return}
+ entries.push({date:chosen,art,kunde:k,stunden:h});save();
+ document.getElementById("kunde").value="";document.getElementById("stunden").value="";render()
+}
+function render(){
+ let today=iso(new Date()),te=entries.filter(e=>e.date===today);
+ let sums=t=>te.filter(e=>e.art===t).reduce((a,e)=>a+Number(e.stunden),0);
+ let tw=sums("arbeit"),tv=sums("urlaub"),ts=sums("krank");
+ document.getElementById("todayWork").textContent=fmt(tw)+" h";document.getElementById("todayVacation").textContent=fmt(tv)+" h";document.getElementById("todaySick").textContent=fmt(ts)+" h";document.getElementById("todayAll").textContent=fmt(tw+tv+ts)+" h";document.getElementById("total").textContent=fmt(tw+tv+ts);
+ let s=monday(selected),end=new Date(s);end.setDate(end.getDate()+7),we=entries.filter(e=>new Date(e.date)>=s&&new Date(e.date)<end);
+ document.getElementById("kw").textContent="KW "+kw(s)+" · "+s.getFullYear();
+ let ww=we.filter(e=>e.art==="arbeit").reduce((a,e)=>a+Number(e.stunden),0),wv=we.filter(e=>e.art==="urlaub").reduce((a,e)=>a+Number(e.stunden),0),ws=we.filter(e=>e.art==="krank").reduce((a,e)=>a+Number(e.stunden),0),all=ww+wv+ws;
+ document.getElementById("wWork").textContent=fmt(ww)+" h";document.getElementById("wVac").textContent=fmt(wv)+" h";document.getElementById("wSick").textContent=fmt(ws)+" h";document.getElementById("wAll").textContent=fmt(all)+" h";
+ document.getElementById("normal").textContent=fmt(Math.min(all,38.5))+" h";document.getElementById("overtime").textContent=fmt(Math.max(0,all-38.5))+" h";
+ let out="";
+ for(let i=0;i<7;i++){let d=new Date(s);d.setDate(d.getDate()+i),key=iso(d),es=entries.filter(e=>e.date===key),sum=es.reduce((a,e)=>a+Number(e.stunden),0);
+ out+=`<div class="day"><div class="dayhead"><span>${d.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"})}</span><span>${fmt(sum)} h</span></div>`;
+ out+=es.length?es.map(e=>`<div class="entry"><span>${e.art==="arbeit"?esc(e.kunde):e.art==="urlaub"?"Urlaub":"Krank"}</span><span class="hours">${fmt(e.stunden)} h</span></div>`).join(""):'<div class="muted">Keine Einträge</div>';out+="</div>"}
+ document.getElementById("week").innerHTML=out
+}
+function startVoice(){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){document.getElementById("stunden").focus();alert("Bitte die iPhone-Diktierfunktion im Stundenfeld verwenden.");return}
+ let r=new SR();r.lang="de-DE";r.interimResults=false;r.maxAlternatives=1;r.onresult=e=>{let t=e.results[0][0].transcript.trim(),m=t.match(/(.+?)\s+(\d+(?:[,.]\d+)?)\s*(?:stunden?|std.?|h)?$/i);if(m){document.getElementById("kunde").value=m[1].trim();document.getElementById("stunden").value=m[2].replace(",","." );add()}else alert("Bitte z. B. „Müller 4 Stunden“ sagen.")};r.onerror=()=>document.getElementById("stunden").focus();r.start()
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function reportData(type){
+ let s=monday(selected),end=new Date(s);end.setDate(end.getDate()+7);
+ return entries.filter(e=>new Date(e.date)>=s&&new Date(e.date)<end&&(type==="all"||e.art===type))
+}
+function createReport(){openReport("all","WOCHENBERICHT")}
+function createSeparate(t){openReport(t,t==="urlaub"?"URLAUBSBERICHT":"KRANKBERICHT")}
+function openReport(type,title){
+ let es=reportData(type),s=monday(selected),W=kw(s),year=s.getFullYear();
+ let w=window.open("","_blank");if(!w){alert("Bitte Pop-ups erlauben.");return}
+ let html=`<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} KW ${W}</title>
+ <style>
+ body{font-family:Arial,sans-serif;margin:20px;color:#111}h1{margin:0 0 4px;font-size:26px}h2{margin:12px 0}
+ .head{display:grid;grid-template-columns:1fr 1fr;border:1px solid #222}.head>div{padding:10px;border-right:1px solid #222}.head>div:last-child{border:0}
+ .day{border:1px solid #222;border-bottom:0}.day:last-of-type{border-bottom:1px solid #222}
+ .dayhead{display:grid;grid-template-columns:150px 1fr 90px;background:#f3f3f3;border-bottom:1px solid #222;font-weight:bold}
+ .dayhead div,.row div{padding:7px;border-right:1px solid #ccc}.dayhead div:last-child,.row div:last-child{border:0}
+ .row{display:grid;grid-template-columns:150px 1fr 90px;border-bottom:1px solid #ddd}.row:last-child{border-bottom:0}
+ .num{text-align:right}.free{text-align:center;color:#1769ff;font-weight:bold;padding:12px}
+ .sum{margin-top:18px;border:1px solid #222;padding:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid div{padding:7px}
+ @media print{body{margin:8mm}}
+ </style><body>
+ <h1>Lugstein Haustechnik</h1>
+ <div class="head"><div><b>Kundenname</b></div><div><b>Name:</b> Ivan Gancov<br><b>Kalenderwoche:</b> ${W} / ${year}</div></div>
+ <h2>${title}</h2>`;
+ let base=new Date(s);
+ for(let i=0;i<7;i++){
+   let d=new Date(base);d.setDate(d.getDate()+i);let key=iso(d),esDay=es.filter(e=>e.date===key);
+   let label=d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+   let dayName=d.toLocaleDateString("de-DE",{weekday:"long"}).toUpperCase();
+   let dayTotal=esDay.reduce((a,e)=>a+Number(e.stunden),0);
+   html+=`<div class="day"><div class="dayhead"><div>Datum<br>${label}<br>${dayName}</div><div>Kunde / Eintrag</div><div>Std.</div></div>`;
+   if(esDay.length){
+     esDay.forEach(e=>{let name=e.art==="arbeit"?esc(e.kunde):e.art==="urlaub"?"Urlaub":"Krank";
+       html+=`<div class="row"><div></div><div>${name}</div><div class="num">${fmt(e.stunden)}</div></div>`;
+     });
+   }else html+=`<div class="free">Keine Einträge</div>`;
+   html+=`<div class="row"><div></div><div><b>Tagessumme</b></div><div class="num"><b>${fmt(dayTotal)}</b></div></div></div>`;
+ }
+ let work=es.filter(e=>e.art==="arbeit").reduce((a,e)=>a+Number(e.stunden),0);
+ let vac=es.filter(e=>e.art==="urlaub").reduce((a,e)=>a+Number(e.stunden),0);
+ let sick=es.filter(e=>e.art==="krank").reduce((a,e)=>a+Number(e.stunden),0);
+ let total=work+vac+sick;
+ html+=`<div class="sum"><div class="grid">
+ <div><b>Arbeitsstunden (Kunde)</b><br>${fmt(work)} h</div>
+ <div><b>Gesamtstunden (Woche)</b><br>${fmt(total)} h</div>
+ <div><b>Urlaubsstunden</b><br>${fmt(vac)} h</div>
+ <div><b>Normalstunden (bis 38,5 h)</b><br>${fmt(Math.min(total,38.5))} h</div>
+ <div><b>Krankstunden</b><br>${fmt(sick)} h</div>
+ <div><b>Überstunden (ab 38,5 h)</b><br>${fmt(Math.max(0,total-38.5))} h</div>
+ </div></div><p><button onclick="window.print()">Als PDF speichern / Drucken</button></p></body></html>`;
+ w.document.write(html);w.document.close();
+}
+document.getElementById("datum").value=iso(new Date());updateFields();render();
+</script>
+</body>
+</html>
