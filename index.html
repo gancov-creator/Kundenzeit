@@ -78,6 +78,7 @@ button{border:0;font-weight:800;margin-top:10px}
  #reportView .report-grid div{padding:3px}
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <header><h1>⏱️ Kundenzeit</h1><small>Arbeitszeit · Urlaub · Krank</small></header>
@@ -195,8 +196,9 @@ function reportData(type){let s=monday(selected),end=new Date(s);end.setDate(end
 function createReport(){openReport("all","WOCHENBERICHT")}
 function createSeparate(t){openReport(t,t==="urlaub"?"URLAUBSBERICHT":"KRANKBERICHT")}
 function openReport(type,title){
+ window.currentReportType=type;
  const es=reportData(type),s=monday(selected),W=kw(s),year=s.getFullYear(),view=document.getElementById("reportView");
- let html=`<div class="report-actions"><button class="secondary" onclick="closeReport()">← Zurück zur App</button><button class="pdf" onclick="window.print()">PDF öffnen / Drucken</button></div><h1>Lugstein Haustechnik</h1>`;
+ let html=`<div class="report-actions"><button class="secondary" onclick="closeReport()">← Zurück zur App</button><button class="pdf" onclick="generatePDF()">PDF herunterladen</button></div><h1>Lugstein Haustechnik</h1>`;
  if(type==="urlaub"||type==="krank"){
   const label=type==="urlaub"?"Urlaubsbericht":"Krankenbericht",total=es.reduce((a,e)=>a+Number(e.stunden),0);
   const rows=es.map(e=>`<tr><td>${esc(e.date)}</td><td>${fmt(e.stunden)} h</td></tr>`).join("");
@@ -213,6 +215,41 @@ function openReport(type,title){
   html+=`<div class="report-sum"><div class="report-grid"><div><b>Arbeitsstunden (Kunde)</b><br>${fmt(work)} h</div><div><b>Gesamtstunden (Woche)</b><br>${fmt(total)} h</div><div><b>Urlaubsstunden</b><br>${fmt(vac)} h</div><div><b>Normalstunden (bis 38,5 h)</b><br>${fmt(Math.min(total,38.5))} h</div><div><b>Krankstunden</b><br>${fmt(sick)} h</div><div><b>Überstunden (ab 38,5 h)</b><br>${fmt(Math.max(0,total-38.5))} h</div></div></div>`;
  }
  view.innerHTML=html;document.getElementById("appMain").style.display="none";document.querySelector("header").style.display="none";document.getElementById("jahresuebersicht").style.display="none";view.style.display="block";window.scrollTo(0,0)
+}
+function generatePDF(){
+ if(!window.jspdf||!window.jspdf.jsPDF){alert("Die PDF-Funktion konnte nicht geladen werden. Bitte Internetverbindung prüfen und erneut versuchen.");return}
+ const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+ const type=window.currentReportType||"all",es=reportData(type),s=monday(selected),W=kw(s),year=s.getFullYear();
+ const pageW=210,left=14,right=196;let y=17;
+ const line=(x1,y1,x2,y2)=>doc.line(x1,y1,x2,y2);
+ const ensure=(h)=>{if(y+h>282){doc.addPage();y=17}};
+ doc.setFont("helvetica","bold");doc.setFontSize(17);doc.text("Lugstein Haustechnik",left,y);y+=10;
+ doc.setFontSize(10);doc.setFont("helvetica","normal");
+ doc.text("Name: Ivan Gancov",left,y);doc.text("Kalenderwoche: "+W+" / "+year,110,y);y+=7;
+ doc.setFont("helvetica","bold");doc.setFontSize(14);doc.text(type==="urlaub"?"URLAUBSBERICHT":type==="krank"?"KRANKBERICHT":"WOCHENBERICHT",left,y);y+=8;
+ const tableRow=(a,b,c,head=false)=>{
+  ensure(8);if(head){doc.setFillColor(238,238,238);doc.rect(left,y-5,182,8,"F");doc.setFont("helvetica","bold")}else doc.setFont("helvetica","normal");
+  doc.setFontSize(9);doc.text(String(a),left+2,y);doc.text(String(b),55,y,{maxWidth:110});if(c!=="")doc.text(String(c),right-2,y,{align:"right"});
+  line(left,y+3,right,y+3);y+=8;
+ };
+ if(type==="urlaub"||type==="krank"){
+  tableRow("Datum","Eintrag","Stunden",true);
+  es.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>tableRow(e.date,type==="urlaub"?"Urlaub":"Krank",fmt(e.stunden)+" h"));
+  const total=es.reduce((a,e)=>a+Number(e.stunden),0);y+=4;doc.setFont("helvetica","bold");doc.text("Gesamt: "+fmt(total)+" h",left,y);
+ }else{
+  for(let i=0;i<5;i++){
+   const d=new Date(s);d.setDate(d.getDate()+i);const key=iso(d),day=es.filter(e=>e.date===key),dayTotal=day.reduce((a,e)=>a+Number(e.stunden),0);
+   ensure(18);doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text(d.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}).toUpperCase(),left,y);y+=6;
+   tableRow("Nr.","Kunde / Eintrag","Std.",true);
+   if(!day.length)tableRow("","Keine Einträge","");
+   day.forEach((e,j)=>tableRow(j+1,e.art==="arbeit"?e.kunde:e.art==="urlaub"?"Urlaub":"Krank",fmt(e.stunden)));
+   doc.setFont("helvetica","bold");tableRow("","Tagessumme",fmt(dayTotal));y+=3;
+  }
+  const work=es.filter(e=>e.art==="arbeit").reduce((a,e)=>a+Number(e.stunden),0),vac=es.filter(e=>e.art==="urlaub").reduce((a,e)=>a+Number(e.stunden),0),sick=es.filter(e=>e.art==="krank").reduce((a,e)=>a+Number(e.stunden),0),total=work+vac+sick;
+  ensure(32);doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("WOCHENSUMME",left,y);y+=6;doc.setFont("helvetica","normal");doc.text("Arbeitsstunden (Kunde): "+fmt(work)+" h",left,y);doc.text("Gesamtstunden (Woche): "+fmt(total)+" h",108,y);y+=6;doc.text("Urlaubsstunden: "+fmt(vac)+" h",left,y);doc.text("Normalstunden (bis 38,5 h): "+fmt(Math.min(total,38.5))+" h",108,y);y+=6;doc.text("Krankstunden: "+fmt(sick)+" h",left,y);doc.text("Überstunden (ab 38,5 h): "+fmt(Math.max(0,total-38.5))+" h",108,y);
+ }
+ const suffix=type==="urlaub"?"Urlaub":type==="krank"?"Krank":"Wochenbericht";
+ doc.save(suffix+"_KW"+W+"_"+year+".pdf");
 }
 function closeReport(){document.getElementById("reportView").style.display="none";document.getElementById("appMain").style.display="block";document.querySelector("header").style.display="block";document.getElementById("jahresuebersicht").style.display="block"}
 function zeigeJahresuebersicht(){
