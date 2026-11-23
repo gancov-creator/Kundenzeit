@@ -237,10 +237,10 @@ function generatePDF(){
   // Alle fünf Wochentage und sämtliche Einträge werden proportional auf genau eine A4-Seite verteilt.
   const summaryHeight=17;
   const bottomMargin=12;
-  const rowUnits=days.reduce((n,x)=>n+3.35+x.day.length,0);
+  const rowUnits=days.reduce((n,x)=>n+3.35+Math.max(1,x.day.length),0);
   const availableHeight=297-bottomMargin-y-summaryHeight;
-  const rowH=Math.max(1.35,availableHeight/rowUnits);
-  const fs=Math.max(4.2,Math.min(7.5,rowH*1.35));
+  const rowH=availableHeight/rowUnits;
+  const fs=Math.max(3.5,Math.min(7.5,rowH*1.25));
   const drawRow=(a,b,c,bold=false,shade=false)=>{
    if(shade){doc.setFillColor(238,238,238);doc.rect(left,y-rowH*.72,width,rowH,"F")}
    doc.setFont("helvetica",bold?"bold":"normal");doc.setFontSize(fs);
